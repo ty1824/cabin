@@ -255,7 +255,8 @@ class CabinFileSystem private constructor(private val archivePath: Path) : AutoC
             closed = true
             addFile(DirectoryEntry(currentOffset, written, path))
             currentOffset += written
-            outputStream.close()
+            // If using Channels.newOutputStream, don't close here as it will close the channel.
+            // TODO: Consolidate output stream behavior, this should handle low-level behavior as well
         }
 
         override fun flush() {

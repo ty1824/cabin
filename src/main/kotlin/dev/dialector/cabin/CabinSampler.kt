@@ -10,7 +10,7 @@ import kotlin.random.Random
 fun main(args: Array<String>) {
     val algorithm = args[0].toInt()
     var totalTime = 0L
-    var totalSize = 0
+    var totalSize = 0L
 
     val archivePath = Path.of("C:\\Users\\tyler\\development\\cabin\\build\\perftest.cabin")
     val filePath = "perf"
@@ -33,9 +33,11 @@ fun main(args: Array<String>) {
     )
     val writer = writers[algorithm]
 
+    val n = 10000
     val random = Random(284712)
-    (1 .. 100).forEach { fileNum ->
-        val size = random.nextInt(1024, 16384)
+    (1 .. n).forEach { fileNum ->
+//        println(fileNum)
+        val size = random.nextInt(1024, 1024 * 512)
         val sizeBuf = ByteBuffer.allocate(4)
         sizeBuf.putInt(size)
         val sizeData = sizeBuf.array()
@@ -48,5 +50,5 @@ fun main(args: Array<String>) {
     }
 
     val milliTime = TimeUnit.NANOSECONDS.toMillis(totalTime)
-    println("$milliTime to serialize $totalSize bytes across 100 files")
+    println("${milliTime}ms to serialize ${String.format("%,d", totalSize)} bytes across $n files")
 }
