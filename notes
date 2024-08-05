@@ -1,0 +1,28 @@
+Packed Cabin files must store folder contents contiguously. This is to optimize read
+operations that read all files or contents within a given directory. Additionally,
+all file contents of a folder must be represented in a chunk either before or after
+subdirectory contents.
+
+Given the following files:
+`a/foo.txt`
+`b/bar.txt`
+`a/y/something.txt`
+`a/baz.txt`
+`c/fizz.txt`
+`a/bang.txt`
+`a/x/zero.txt`
+`b/blah.txt`
+`a/x/one.txt
+
+One valid output representation would be
+`a/foo.txt`
+`a/baz.txt`
+`a/bang.txt`
+`a/y/something.txt`
+`a/x/zero.txt`
+`a/x/one.txt`
+`b/bar.txt`
+`b/blah.txt`
+`c/fizz.txt`
+
+File ordering within folders is not defined and should not be relied upon.

@@ -1,11 +1,6 @@
 package dev.dialector.cabin
 
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.io.FileNotFoundException
-import java.io.InputStream
-import java.io.OutputStream
-import java.io.RandomAccessFile
+import java.io.*
 import java.nio.MappedByteBuffer
 import java.nio.channels.Channels
 import java.nio.channels.FileChannel
@@ -105,7 +100,7 @@ class ReadOnlyCabinArchive private constructor(private val archivePath: Path) {
  *
  * Unpacked Cabin files are represented by two separate OS files - the file data and the archive directory.
  *
- * Packed cabin
+ * Packed Cabin files are proper single-file archives.
  *
  */
 class CabinFileSystem private constructor(private val archivePath: Path) : AutoCloseable {
@@ -160,10 +155,19 @@ class CabinFileSystem private constructor(private val archivePath: Path) : AutoC
         return Channels.newInputStream(channel)
     }
 
+    fun directInputStream(path: String): InputStream {
+        return CabinFileInputStream(readFileDirect(path), path)
+    }
+
     fun newOutputStream(path: String): OutputStream {
         val channel = writeChannel
         channel.position(currentOffset)
         val os = Channels.newOutputStream(channel)
+        return CabinOutputStream(path, os)
+    }
+
+    fun directOutputStream(path: String, length: Long): OutputStream {
+        val os = CabinFileOutputStream(writeFileDirect(path, length), path)
         return CabinOutputStream(path, os)
     }
 
@@ -202,7 +206,7 @@ class CabinFileSystem private constructor(private val archivePath: Path) : AutoC
                 val indexEntries = input.readInt()
 //                println("Metadata: $indexEntries entries, offset $indexOffset")
                 channel.position(indexOffset)
-                (0 until indexEntries).forEach {
+                repeat(indexEntries) {
                     entries += readEntry(input)
                 }
             }
@@ -225,9 +229,125 @@ class CabinFileSystem private constructor(private val archivePath: Path) : AutoC
         files.remove(file.path)
     }
 
-    private class CabinInputStream(private val inputStream: InputStream, private val length: Long) : InputStream() {
+    private class CabinFileInputStream(private val buffer: MappedByteBuffer, private val path: String) : InputStream() {
+        var closed = false
+        var pos = 0
+
         override fun read(): Int {
-            TODO("Not yet implemented")
+            val b = ByteArray(1)
+            return if (this.read(b, 0, 1) == 1) b[0].toInt() and 255 else -1
+        }
+
+        override fun read(b: ByteArray): Int =
+            read(b, 0, b.size)
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (closed) throw IOException("Input stream for $path closed")
+            val remaining = buffer.remaining()
+            return if (remaining < len) {
+                buffer.get(b, off, remaining)
+                remaining
+            } else {
+                buffer.get(b, off, len)
+                b.size
+            }
+        }
+
+        override fun close() {
+            closed = true
+        }
+
+        override fun readAllBytes(): ByteArray {
+            val result = ByteArray(buffer.remaining())
+            read(result)
+            return result
+        }
+
+        override fun readNBytes(len: Int): ByteArray {
+            val remaining = buffer.remaining()
+            val result = if (len > remaining) {
+                ByteArray(remaining)
+            } else {
+                ByteArray(len)
+            }
+            read(result)
+            return result
+        }
+
+        override fun readNBytes(b: ByteArray, off: Int, len: Int): Int =
+            read(b, off, len)
+
+        override fun skip(n: Long): Long {
+            if (n > buffer.remaining()) {
+                throw EOFException("Attempted to skip $n bytes but only ${buffer.remaining()} remaining.")
+            }
+            buffer.position(buffer.position() + n.toInt())
+            return n
+        }
+
+        override fun skipNBytes(n: Long) {
+            skip(n)
+        }
+
+
+        /**
+         * If the backing buffer is loaded into memory, returns the number of bytes remaining in the stream.
+         * Otherwise, this returns 0.
+         *
+         * NOTE: This is an estimate, see [MappedByteBuffer.isLoaded] for reference.
+         */
+        override fun available(): Int =
+            if (buffer.isLoaded) buffer.remaining() else 0
+
+        /**
+         * Marks the current location in the buffer such that a call to [reset] will return to this location.
+         *
+         * The readLimit parameter has no effect.
+         */
+        override fun mark(readlimit: Int) {
+            buffer.mark()
+        }
+
+        override fun reset() {
+            buffer.reset()
+        }
+
+        override fun markSupported(): Boolean = true
+
+        override fun transferTo(out: OutputStream): Long {
+            return super.transferTo(out)
+        }
+    }
+
+    private inner class CabinFileOutputStream(
+        private var buffer: MappedByteBuffer?,
+        private val path: String
+    ) : OutputStream() {
+
+        override fun close() {
+            buffer = null
+        }
+
+        override fun flush() {
+            buffer?.force()
+        }
+
+        override fun write(b: Int) {
+            ifOpen {
+                put(b.toByte())
+            }
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            ifOpen {
+                put(b, off, len)
+            }
+        }
+
+        inline fun <T> ifOpen(block: MappedByteBuffer.() -> T): T {
+            // TODO should this be synchronized?
+            val buf = buffer ?: throw IOException("OutputStream for $path is closed")
+            return buf.block()
         }
     }
 

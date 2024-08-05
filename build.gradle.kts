@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "1.7.21"
+    kotlin("jvm") version "2.0.0"
     id("org.jlleitschuh.gradle.ktlint") version "11.0.0"
 }
 
@@ -17,6 +17,10 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:$junit_version")
 
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junit_version")
+}
+
+kotlin {
+    jvmToolchain(21)
 }
 
 tasks.test {

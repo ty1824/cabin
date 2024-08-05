@@ -31,3 +31,7 @@ build/
 
 # local IDEA project files
 .idea
+
+# misc files
+.DS_Store
+cabin_test
